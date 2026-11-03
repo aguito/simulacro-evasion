@@ -1,0 +1,22 @@
+{
+  "name": "Simulacro de Evasión Táctica",
+  "short_name": "Simulacro",
+  "description": "Aplicación de entrenamiento y evaluación para simulacros de evacuación bajo estrés.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#121212",
+  "theme_color": "#FFEA00",
+  "icons": [
+    {
+      "src": "https://www.w3.org/TR/appmanifest/images/icon-192.png", 
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://www.w3.org/TR/appmanifest/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

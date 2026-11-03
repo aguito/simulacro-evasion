@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- Evita zoom o escalado accidental por pulsaciones rápidas bajo estrés -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Simulacro de Evasión - Operación Póker</title>
+  
+  <!-- Enlace al manifest PWA -->
+  <link rel="manifest" href="./manifest.json">
+
+  <!-- Carga de la librería ligera para IndexedDB (Guardado Offline) -->
+  <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #121212;
+      --text-color: #FFFFFF;
+      --picas-color: #E0E0E0;      /* Conocimientos */
+      --corazones-color: #FF3B30;  /* Gestión Humana */
+      --diamantes-color: #FFD60A;  /* Recursos */
+      --treboles-color: #34C759;   /* Habilidades */
+      --joker-color: #BF5AF2;      /* Acontecimientos Inesperados */
+      --danger-color: #FF3B30;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 0;
+      min-height: 100vh; width: 100vw;
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pan-y;
+      transition: background-color 0.4s ease;
+    }
+
+    /* Botón Global de Emergencia Real */
+    #btn-emergencia {
+      position: fixed; top: 0; left: 0; width: 100%; height: 50px;
+      background-color: var(--danger-color); color: white; border: none;
+      font-size: 1.1rem; font-weight: bold; z-index: 1000; display: none;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+
+    /* Vistas / Pantallas */
+    .vista {
+      display: none; flex-direction: column; min-height: 100vh; padding: 25px;
+      position: relative; box-sizing: border-box;
+    }
+    .vista.activa { display: flex; }
+
+    /* Tipografía */
+    h1 { font-size: 2.2rem; text-transform: uppercase; margin-top: 10px; margin-bottom: 15px; }
+    h2 { font-size: 1.5rem; color: var(--diamantes-color); margin-top: 0; }
+    p, li { font-size: 1.15rem; line-height: 1.5; color: #ddd; margin-bottom: 15px; }
+    ul { padding-left: 20px; }
+
+    /* Botones Masivos */
+    .btn-masivo {
+      width: 100%; min-height: 70px; margin-top: auto; margin-bottom: 12px;
+      background-color: #2c2c2e; color: #fff; border: 2px solid #444; border-radius: 14px;
+      font-size: 1.3rem; font-weight: 800; text-transform: uppercase; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: transform 0.1s, background-color 0.2s;
+    }
+    .btn-masivo:active { transform: scale(0.98); }
+    .btn-masivo.primario { background-color: var(--treboles-color); color: #000; border: none; }
+    .btn-masivo.inicio { background-color: var(--diamantes-color); color: #000; border: none; }
+    .btn-masivo.compartir { background-color: var(--corazones-color); color: #fff; border: none; }
+    
+    /* Botón especial para activar Joker */
+    .btn-joker-activar {
+      width: 100%; min-height: 60px; margin-bottom: 10px;
+      background-color: #2a0033; color: var(--joker-color); border: 2px solid var(--joker-color);
+      border-radius: 12px; font-size: 1.2rem; font-weight: bold; cursor: pointer;
+      box-shadow: 0 0 10px rgba(191, 90, 242, 0.2);
+    }
+    .btn-joker-activar:active { background-color: var(--joker-color); color: #000; }
+
+    /* Modo Acción / Cartas */
+    .cabecera-accion { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
+    #progreso-texto { font-size: 1.1rem; color: #888; font-weight: bold; }
+    #temporizador { font-size: 1.8rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+    #zona-carta {
+      flex-grow: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; border: 4px solid #333;
+      border-radius: 20px; padding: 20px; margin: 15px 0; background-color: #1a1a1a;
+      transition: all 0.3s ease;
+    }
+    #icono-palo { font-size: 5rem; margin-bottom: 5px; line-height: 1; }
+    #nombre-palo { font-size: 1.3rem; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
+    #instruccion { font-size: 1.35rem; font-weight: 700; margin-top: 15px; line-height: 1.35; text-align: left; }
+
+    /* Autoevaluación */
+    .puntuaciones { display: flex; justify-content: space-between; gap: 8px; margin: 15px 0; }
+    .btn-punto {
+      flex: 1; padding: 16px 0; background: #2c2c2e; color: white; border: 1px solid #444;
+      border-radius: 8px; font-size: 1.4rem; font-weight: bold; cursor: pointer;
+    }
+    .btn-punto.seleccionado { background: var(--treboles-color); color: black; border-color: var(--treboles-color); }
+    textarea {
+      width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #444;
+      border-radius: 8px; font-size: 1rem; resize: vertical; box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Botón Global de Emergencia Real -->
+  <button id="btn-emergencia">Mantén presionado para EMERGENCIA REAL</button>
+
+  <!-- VISTA 1: NORMAS DE SEGURIDAD -->
+  <section id="vista-normas" class="vista activa">
+    <div style="margin: -25px -25px 20px -25px; border-bottom: 3px solid var(--diamantes-color); background: #000; text-align: center;">
+      <img src="img_curso.png" alt="Simulacro Evasión Zona Urbana" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\'padding:20px; color:#ff3b30; font-weight:bold;\'>⚠️ No se pudo cargar img_curso.png</div>';">
+    </div>
+
+    <h2>Objetivo y Normas de Seguridad</h2>
+    <p>Bienvenido al ejercicio de entrenamiento. El objetivo es evaluar la toma de decisiones, la velocidad de reacción y la capacidad de observación bajo estrés.</p>
+    <ul>
+      <li><strong>Seguridad:</strong> Prioriza la integridad física. No corras en zonas irregulares o con tráfico.</li>
+      <li><strong>Silencio Táctico:</strong> Mantén la comunicación restringida al mínimo necesario.</li>
+      <li><strong>Sistemas de Juego:</strong> Las decisiones y ejercicios se categorizan según los palos del póker: ♠️ Conocimientos, ♥️ Gestión Humana, ♦️ Recursos, ♣️ Habilidades y 🃏 Eventos Inesperados.</li>
+    </ul>
+    <button class="btn-masivo primario" onclick="cambiarVista('vista-contexto')">Comprendo las Normas</button>
+  </section>
+
+  <!-- VISTA 2: CONTEXTO INICIAL -->
+  <section id="vista-contexto" class="vista">
+    <h1 style="color: var(--diamantes-color);">Contexto Operativo</h1>
+    
+    <div style="background: #1a1a1a; padding: 20px; border-radius: 12px; border: 1px solid #333; margin-bottom: 20px; max-height: 60vh; overflow-y: auto;">
+      
+      <!-- Imagen contexto_0 -->
+      <div style="margin: -20px -20px 20px -20px; border-bottom: 2px solid var(--diamantes-color); background: #000; text-align: center;">
+        <img src="contexto_0.jpg" alt="Panorámica del Conflicto" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\'padding:10px; color:#ff3b30;\'>⚠️ contexto_0.jpg no encontrada</div>';">
+      </div>
+
+      <p>Los disturbios de la semana pasada han desencadenado en una oleada de violencia sin precedentes. La policía local y los Mossos d'Esquadra están desbordados, y se ha movilizado al ejército para contener batallas campales en el centro de la ciudad.</p>
+      <p>Los barrios colindantes y los suburbios están desprotegidos, sufriendo actos vandálicos y saqueos en comercios y viviendas. Se ha suspendido la actividad académica y la cadena de suministro se ha roto, provocando escasez de productos básicos. Si no se revierte la situación, es inminente el confinamiento militar de la población civil.</p>
+      <p>Tu barrio, una zona residencial habitualmente tranquila, ya no es seguro. Hace dos días asaltaron dos pisos con sus inquilinos dentro en tu misma calle. Los vecinos han establecido turnos de vigilancia, pero los enfrentamientos con grupos de pillaje son cada vez más frecuentes.</p>
+
+      <!-- Imagen contexto_1 -->
+      <div style="margin: 20px -20px; border-top: 1px solid #333; border-bottom: 1px solid #333; background: #000; text-align: center;">
+        <img src="contexto_1.jpg" alt="Disturbios y Fuego en la Calle" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\'padding:10px; color:#ff3b30;\'>⚠️ contexto_1.jpg no encontrada</div>';">
+      </div>
+
+      <p>A primera hora de la mañana tomas una decisión. Llenas el maletero del coche con garrafas de agua, comida, ropa y equipo sanitario. Como sois seis en la familia y el coche va cargado, metes a tu mujer, tus dos hijos y tus padres en el vehículo de cinco plazas para que evacúen hacia vuestra segunda residencia en la montaña, una zona aislada y con recursos. Tú te quedas asegurando la casa, con el plan de reunirte con ellos en los próximos días usando el transporte público.</p>
+      <p>Acordáis comunicaros por radio debido a los cortes telefónicos. Si la situación se vuelve crítica y te ves obligado a abandonar el hogar, activaréis el protocolo de emergencia 3-3-3: canal 3, cada 3 horas, 3 minutos de transmisión.</p>
+      <p>Al mediodía, el chirrido de la estática rompe el silencio. Es tu mujer. Han llegado al destino, pero han tardado el triple de lo normal. Con voz temblorosa, te informa de que en los controles de carretera grupos armados —no sabe distinguir si militares o saqueadores— están registrando vehículos y confiscando provisiones.</p>
+      <p>Una hora después, las noticias confirman el peor escenario: el ejército ha bloqueado todas las carreteras. Solo pasan convoyes de emergencia. Te has quedado atrapado.</p>
+      <p>Tus únicas vías de escape ahora son una red ferroviaria de la que no tienes confirmación operativa, o los senderos de la sierra, que se han convertido en refugio de asaltantes.</p>
+      <p>Cae la noche. El alumbrado público muere a ratos, sumiendo la calle en una oscuridad densa. Nadie camina solo y el silencio es antinatural.</p>
+      <p>A las dos de la madrugada, ocurre.</p>
+
+      <!-- Imagen contexto_2 -->
+      <div style="margin: 20px -20px; border-top: 1px solid #333; border-bottom: 1px solid #333; background: #000; text-align: center;">
+        <img src="contexto_2.jpg" alt="Vehículo ardiendo en la noche" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\'padding:10px; color:#ff3b30;\'>⚠️ contexto_2.jpg no encontrada</div>';">
+      </div>
+
+      <p style="color: var(--corazones-color); font-weight: bold; font-size: 1.3rem; text-align: center;">¡PUM! ¡PUM!</p>
+      <p>Dos disparos secos hacen vibrar los cristales. Medio segundo después, una explosión ensordecedora hace temblar los cimientos del edificio. Separas las lamas de la persiana apenas unos milímetros y ves un resplandor furioso. Al final de la calle, un coche arde como una hoguera mientras sombras humanas corren alrededor del fuego, gritando.</p>
+      <p>El perímetro ya no es seguro. Tienes que iniciar la evasión.</p>
+      <p>Pero no estás solo. Como parte del comité de vigilancia vecinal, tú y otros residentes de confianza establecisteis un protocolo de contingencia en caso de que la seguridad del barrio se viera comprometida. Enciendes la radio PMR, ajustas el canal 3 y transmites:</p>
+
+      <div style="background: #111; padding: 12px; border-left: 3px solid var(--diamantes-color); font-family: monospace; font-size: 1rem; color: #fff; margin: 15px 0;">
+        — Aquí AVA3, QRV Ch3, subtono 5. QTC.<br>
+        — Aquí AVA2, QRV.<br>
+        — Aquí AVA1, QRV.<br>
+        — Aquí AVA3. PRP2 a las 1800. QSL?<br>
+        — Aquí AVA1, QSL PRP2 1800.<br>
+        — Aquí AVA2, QSL PRP2 1800.<br>
+        — Aquí AVA3, QRT.
+      </div>
+
+      <p>Moverse ahora, en plena noche y con los disturbios activos, sería un suicidio táctico. El plan exige aprovechar las horas diurnas para camuflarse entre la población civil. Revisas el checklist del estado de las baterías, la caducidad de los medicamentos y los consumibles de tu mochila de evasión. Tras asegurarlo todo, intentas descansar un poco. Mañana será un día duro.</p>
+      <p>A las 17:00 abandonas tu edificio. El destino (PRP2), en pleno centro de la ciudad.</p>
+      <p>Para llegar hasta allí y reunirte con tu equipo, deberás transitar por calles donde impera la escasez y el nerviosismo. Te cruzarás con ciudadanos desesperados, patrullas policiales en alerta máxima y grupos de oportunistas. El objetivo de esta fase no es el combate ni la huida furtiva por las sombras, sino el <strong>mimetismo</strong>. Debes parecer un civil más buscando suministros, gestionar tu lenguaje corporal y ocultar cualquier rasgo que te identifique como alguien preparado o con recursos.</p>
+
+      <p style="color: var(--diamantes-color); font-weight: bold; text-align: center; font-size: 1.2rem;">Intenta no llamar demasiado la atención.</p>
+
+      <!-- Imagen contexto_3 -->
+      <div style="margin: 20px -20px -20px -20px; border-top: 1px solid #333; background: #000; text-align: center;">
+        <img src="contexto_3.jpg" alt="Multitud de civiles" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\'padding:10px; color:#ff3b30;\'>⚠️ contexto_3.jpg no encontrada</div>';">
+      </div>
+    </div>
+
+    <div style="background: #252525; padding: 15px; border-radius: 10px; margin-bottom: 15px; text-align: center; border: 1px dashed var(--diamantes-color);">
+      <strong style="color: var(--diamantes-color);">INSTRUCCIONES:</strong><br>
+      Desplázate al <strong>Punto de Reunión Principal 2 (PRP2)</strong>. Presiona el botón al posicionarte.
+    </div>
+
+    <button class="btn-masivo inicio" onclick="iniciarSimulacro()">HE LLEGADO AL PUNTO DE ENCUENTRO</button>
+  </section>
+
+  <!-- PASO 1 DEL EJERCICIO: INSTRUCCIONES (CARTA) + BOTONES DE JOKER -->
+  <section id="vista-instruccion" class="vista">
+    <div class="cabecera-accion">
+      <div id="progreso-texto">Ejercicio 1 de 3</div>
+      <div id="temporizador">00:00</div>
+    </div>
+    
+    <div id="zona-carta">
+      <div id="icono-palo">♣️</div>
+      <div id="nombre-palo">Habilidades</div>
+      <div id="instruccion">Cargando instrucción...</div>
+    </div>
+
+    <!-- Contenedor dinámico de botones Joker bajo demanda -->
+    <div id="contenedor-botones-joker" style="width: 100%;"></div>
+
+    <button id="btn-accion-carta" class="btn-masivo primario" onclick="irAEvaluacionObservacion()">Completado / Evaluar</button>
+  </section>
+
+  <!-- VISTA ESPECIAL: PANTALLA DE JOKER (IMPREVISTO ACTIVADO) -->
+  <section id="vista-joker" class="vista">
+    <div class="cabecera-accion">
+      <div style="color: var(--joker-color); font-weight: bold; font-size: 1.2rem;">🃏 EVENTO INESPERADO</div>
+      <div id="temporizador-joker" style="font-size: 1.8rem; font-weight: 900; font-variant-numeric: tabular-nums;">00:00</div>
+    </div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border: 4px solid var(--joker-color); border-radius: 20px; padding: 25px; margin: 20px 0; background-color: #2a0033; box-shadow: 0 0 30px rgba(191, 90, 242, 0.4);">
+      <div style="font-size: 5.5rem; line-height: 1; margin-bottom: 10px;">🃏</div>
+      <div id="joker-titulo" style="font-size: 1.4rem; font-weight: 900; color: var(--joker-color); text-transform: uppercase;">¡INCIDENTE TÁCTICO!</div>
+      <div id="joker-texto" style="font-size: 1.35rem; font-weight: 700; margin-top: 20px; line-height: 1.35; color: #fff; text-align: left;">Cargando imprevisto...</div>
+    </div>
+
+    <button class="btn-masivo" style="background-color: var(--joker-color); color: #000; border: none;" onclick="completarJoker()">Imprevisto Resuelto - Volver a Misión</button>
+  </section>
+
+  <!-- PASO 2 DEL EJERCICIO: EVALUACIÓN DE OBSERVACIÓN -->
+  <section id="vista-observacion" class="vista">
+    <h1 id="titulo-eval-obs" style="color: var(--picas-color);">Evaluación de Entorno</h1>
+    <p id="subtitulo-eval-obs" style="font-style: italic; color: #aaa;"></p>
+    
+    <p><strong>Responde verbalmente o en voz alta con tu equipo:</strong></p>
+    <ul id="lista-preguntas-obs"></ul>
+    
+    <button class="btn-masivo primario" onclick="irAAutoevaluacion()">Pasar a Autoevaluación (1-5)</button>
+  </section>
+
+  <!-- PASO 3 DEL EJERCICIO: AUTOEVALUACIÓN (1 al 5) -->
+  <section id="vista-autoevaluacion" class="vista">
+    <h1 id="titulo-auto-eval" style="color: var(--treboles-color);">Autoevaluación</h1>
+    <p id="pregunta-auto-eval" style="color: #ddd; font-size: 1.15rem;"></p>
+
+    <div class="puntuaciones" id="bloque-puntos-actual">
+      <button class="btn-punto" onclick="puntuarEjercicioActual(1)">1</button>
+      <button class="btn-punto" onclick="puntuarEjercicioActual(2)">2</button>
+      <button class="btn-punto" onclick="puntuarEjercicioActual(3)">3</button>
+      <button class="btn-punto" onclick="puntuarEjercicioActual(4)">4</button>
+      <button class="btn-punto" onclick="puntuarEjercicioActual(5)">5</button>
+    </div>
+
+    <p style="margin-top: 15px; margin-bottom: 5px; color: #aaa;">Observaciones / Comentarios:</p>
+    <textarea id="comentario-actual" rows="3" placeholder="Añade notas sobre esta prueba..."></textarea>
+
+    <button class="btn-masivo primario" style="margin-top: 20px;" onclick="guardarYContinuar()">Siguiente Ejercicio</button>
+  </section>
+
+  <!-- PANTALLA FINAL: RESUMEN AGRUPADO POR PALOS DE PÓKER -->
+  <section id="vista-resumen" class="vista">
+    <h1 style="color: var(--diamantes-color);">Informe Final Resumen</h1>
+    <p id="resumen-tiempo">Tiempo total de ejecución: --</p>
+    
+    <div id="contenido-resumen" style="margin-bottom: 20px;"></div>
+
+    <button class="btn-masivo compartir" onclick="compartirInforme()">📤 Enviar Informe a Instructor</button>
+    <button class="btn-masivo" onclick="location.reload()">Reiniciar App</button>
+  </section>
+
+  <script>
+    /* =========================================
+       1. SERVICE WORKER PWA
+       ========================================= */
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+      });
+    }
+
+    /* =========================================
+       2. BASE DE DATOS DE EJERCICIOS Y JOKERS
+       ========================================= */
+    const ejercicios = [
+      { 
+        palo: "treboles", 
+        icono: "♣️", 
+        nombre: "Habilidades (SRD)", 
+        color: "var(--treboles-color)",
+        instruccion: "Establece contacto usando Señales de Reconocimiento Discretas (SRD) con el miembro del equipo que sostiene una botella de agua en la mano izquierda mientras mira el móvil, o tiene la mochila apoyada junto al pie derecho. La interacción debe parecer un encuentro cotidiano entre desconocidos.",
+        jokers: [], // Sin Jokers en el Ejercicio 1
+        subtituloObs: "Observa tu entorno, identifica comportamientos anómalos y mantén la disciplina de no correr a abrazarse o saludarse efusivamente en mitad de un escenario hostil.",
+        preguntasObs: [
+          "¿Cuántos policías había en el PRP2?",
+          "¿Cuántas personas había aproximadamente?",
+          "¿Has identificado vías de escape?",
+          "¿La interacción ha sido realista?",
+          "¿Crees que habéis llamado la atención?"
+        ],
+        preguntaAuto: "¿Te ha sido sencillo localizar e identificar al miembro del equipo? ¿Te has sentido cómodo o te ha parecido forzada la situación?"
+      },
+      { 
+        palo: "diamantes", 
+        icono: "♦️", 
+        nombre: "Recursos (Mapa y Ruta)", 
+        color: "var(--diamantes-color)",
+        instruccion: "En el punto de encuentro Protección Civil facilita mapas de la ciudad con Albergues Provisionales de Emergencia con instrucciones de llegada, registro, normas, logística y comunicaciones oficiales. Utiliza el mapa para trazar una ruta factible que te permita alcanzar una zona elevada para evaluar la mejor zona de escape para abandonar la ciudad y reunirte con tu familia. Mantén el ritmo y permanece atento al entorno.",
+        jokers: [
+          {
+            id: "j2_1",
+            titulo: "JOKER 1: Posible Seguimiento",
+            texto: "Sospechas que algún civil te sigue. Realiza un cambio de sentido, entra en un establecimiento u ocúltate para verificar que no se trata de un seguimiento activo."
+          },
+          {
+            id: "j2_2",
+            titulo: "JOKER 2: Vía Bloqueada",
+            texto: "En tu ruta el acceso a un camino está bloqueado por una valla con un candado que cierra el paso. Abre el candado con una ganzúa o busca un camino alternativo para proseguir el avance."
+          }
+        ],
+        subtituloObs: "Mientras caminas, evalúa y recopila información de valor. No se trata de memorizar indiscriminadamente todo lo que ves, sino de aprender a distinguir información útil para una evaluación posterior.",
+        preguntasObs: [
+          "¿Cuántas Farmacias has visto?",
+          "¿Cuántas Fuentes?",
+          "¿Has visto algún Centro Sanitario?",
+          "¿Cuántos Supermercados / comercios de alimentación?",
+          "¿Has visto algún Cajero?",
+          "¿Has podido resolver los percances del camino?",
+          "¿Has evaluado si alguien te estaba siguiendo?"
+        ],
+        preguntaAuto: "¿Has sabido identificar recursos, seguir la ruta y resolver los incidentes?"
+      },
+      {
+        palo: "picas",
+        icono: "♠️",
+        nombre: "Conocimientos (Observación de Vías)",
+        color: "var(--picas-color)",
+        instruccion: "Consigues ganar altura y te resguardas en una loma con buena visibilidad sobre las principales vías de comunicación y la red de carreteras. Ajustas la respiración, te mimetizas con la vegetación y realizas una observación del terreno:\n\n• Opción de Ruta A (Vía Secundaria/Acceso Este): Tráfico denso, humaredas, destellos de hogueras y sirenas constantes.\n• Opción de Ruta B (Carretera Principal/Nacional): Retención masiva de kilómetros. Pasado un punto crítico más adelante, el tráfico vuelve a ser fluido.\n\nTienes frente a ti dos imágenes opuestas y parciales. Debes agotar las fuentes de información disponibles para evaluar los riesgos de cada ruta y determinar la vía de escape más segura antes de comprometer tu posición.",
+        jokers: [
+          {
+            id: "j3_1",
+            titulo: "JOKER 1: Confrontación",
+            texto: "A pocos metros, tras un recodo, escuchas voces: '—Si viene alguien más, lo paramos de golpe. No dejamos pasar a nadie sin revisar qué lleva en la mochila. —Asegúrate de no darle tiempo a reaccionar. Si hace un gesto raro, le das con el hierro.' están apostados en mitad del único paso disponible. Retroceder no es una opción y la negociación es inviable: aplica una técnica de ruptura de contacto activa."
+          }
+        ],
+        subtituloObs: "Evalúa cómo has analizado las fuentes de información y la gestión de la observación táctica.",
+        preguntasObs: [
+          "¿Has podido superar los obstáculos del camino de forma eficiente?",
+          "¿Has podido identificar visualmente de forma clara la situación de las vías de comunicación?",
+          "¿Has realizado una escucha pasiva en bandas locales (escáner comercial o radioafición/PMR) para captar tráfico sobre qué ocurre en la Ruta B (¿control de carretera o accidente?)?",
+          "¿Has intentado transmitir brevemente para cruzar información de inteligencia ('Aquí AVA3, observo retención en Ruta B con paso fluido posterior, ¿tenéis reporte de control de carretera en ese punto?')?",
+          "¿Conocías las frecuencias de las emisoras comerciales / PMR?"
+        ],
+        preguntaAuto: "¿Has podido acceder a la zona de observación y has podido obtener la información necesaria para decidir la ruta de evasión?"
+      }
+    ];
+
+    let indiceActual = 0;
+    let tiempoInicio = 0;
+    let intervaloTimer;
+    let wakeLock = null;
+    let notaSeleccionadaActual = 0;
+    let jokersResueltosEnEjercicio = [];
+
+    // Matriz de resultados finales
+    const resultados = [];
+
+    const ui = {
+      temporizador: document.getElementById('temporizador'),
+      temporizadorJoker: document.getElementById('temporizador-joker'),
+      btnEmergencia: document.getElementById('btn-emergencia')
+    };
+
+    /* =========================================
+       3. NAVEGACIÓN Y HARDWARE
+       ========================================= */
+    function cambiarVista(idVista) {
+      document.querySelectorAll('.vista').forEach(v => v.classList.remove('activa'));
+      document.getElementById(idVista).classList.add('activa');
+      window.scrollTo(0, 0);
+    }
+
+    async function solicitarWakeLock() {
+      try {
+        if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+      } catch (err) { console.warn('WakeLock no disponible', err); }
+    }
+
+    function vibrar(patron) {
+      if ('vibrate' in navigator) navigator.vibrate(patron);
+    }
+
+    /* =========================================
+       4. BUCLE DE EJECUCIÓN DEL SIMULACRO
+       ========================================= */
+    async function iniciarSimulacro() {
+      await solicitarWakeLock();
+      tiempoInicio = Date.now();
+      indiceActual = 0;
+      resultados.length = 0;
+
+      ui.btnEmergencia.style.display = 'block';
+      intervaloTimer = setInterval(actualizarTemporizador, 1000);
+
+      cargarPasoInstruccion();
+      cambiarVista('vista-instruccion');
+    }
+
+    function actualizarTemporizador() {
+      const segundos = Math.floor((Date.now() - tiempoInicio) / 1000);
+      const min = String(Math.floor(segundos / 60)).padStart(2, '0');
+      const sec = String(segundos % 60).padStart(2, '0');
+      const textoTiempo = `${min}:${sec}`;
+      
+      ui.temporizador.textContent = textoTiempo;
+      ui.temporizadorJoker.textContent = textoTiempo; // El tiempo NUNCA se detiene
+    }
+
+    // PASO 1: Carta de Instrucción + Generación de Botones Joker
+    function cargarPasoInstruccion() {
+      const ej = ejercicios[indiceActual];
+      jokersResueltosEnEjercicio = []; // Resetear registro para este ejercicio
+
+      document.getElementById('progreso-texto').innerText = `Ejercicio ${indiceActual + 1} de ${ejercicios.length}`;
+      document.getElementById('icono-palo').innerText = ej.icono;
+      document.getElementById('nombre-palo').innerText = ej.nombre;
+      document.getElementById('nombre-palo').style.color = ej.color;
+      document.getElementById('instruccion').innerText = ej.instruccion;
+      
+      const zonaCarta = document.getElementById('zona-carta');
+      zonaCarta.style.borderColor = ej.color;
+      zonaCarta.style.boxShadow = `0 0 20px ${ej.color}40`;
+
+      // Generar botones para los Jokers configurados en este ejercicio
+      const contenedorJokers = document.getElementById('contenedor-botones-joker');
+      contenedorJokers.innerHTML = '';
+
+      if (ej.jokers && ej.jokers.length > 0) {
+        ej.jokers.forEach((joker, i) => {
+          contenedorJokers.innerHTML += `
+            <button class="btn-joker-activar" id="btn-jk-${i}" onclick="activarJokerManual(${i})">
+              🃏 ACTIVAR JOKER ${i + 1}
+            </button>
+          `;
+        });
+      }
+
+      vibrar([100, 50, 100]);
+    }
+
+    // ACTIVAR UN JOKER MANULMENTE
+    function activarJokerManual(indexJoker) {
+      const ej = ejercicios[indiceActual];
+      const joker = ej.jokers[indexJoker];
+
+      vibrar([500, 200, 500, 200]);
+      document.getElementById('joker-titulo').innerText = joker.titulo;
+      document.getElementById('joker-texto').innerText = joker.texto;
+
+      // Registrar que este Joker ha sido ejecutado
+      if (!jokersResueltosEnEjercicio.includes(joker.titulo)) {
+        jokersResueltosEnEjercicio.push(joker.titulo);
+      }
+
+      // Marcar botón como activado visualmente
+      const btn = document.getElementById(`btn-jk-${indexJoker}`);
+      if (btn) {
+        btn.style.backgroundColor = 'var(--joker-color)';
+        btn.style.color = '#000';
+        btn.innerText = `🃏 JOKER ${indexJoker + 1} EN CURSO`;
+      }
+
+      cambiarVista('vista-joker');
+    }
+
+    // VOLVER DE LA PANTALLA DE JOKER A LA CARTA DEL EJERCICIO
+    function completarJoker() {
+      vibrar([100]);
+      cambiarVista('vista-instruccion');
+    }
+
+    // PASO 2: Preguntas de Observación Verbal
+    function irAEvaluacionObservacion() {
+      const ej = ejercicios[indiceActual];
+      document.getElementById('titulo-eval-obs').innerText = `Evaluación: ${ej.nombre}`;
+      document.getElementById('titulo-eval-obs').style.color = ej.color;
+      document.getElementById('subtitulo-eval-obs').innerText = ej.subtituloObs;
+
+      const ul = document.getElementById('lista-preguntas-obs');
+      ul.innerHTML = '';
+      ej.preguntasObs.forEach(p => {
+        ul.innerHTML += `<li>${p}</li>`;
+      });
+
+      cambiarVista('vista-observacion');
+    }
+
+    // PASO 3: Autoevaluación 1 a 5
+    function irAAutoevaluacion() {
+      const ej = ejercicios[indiceActual];
+      document.getElementById('titulo-auto-eval').innerText = `Autoevaluación: ${ej.icono} ${ej.nombre}`;
+      document.getElementById('titulo-auto-eval').style.color = ej.color;
+      document.getElementById('pregunta-auto-eval').innerText = ej.preguntaAuto;
+
+      // Limpiar selecciones previas
+      notaSeleccionadaActual = 0;
+      const botones = document.getElementById('bloque-puntos-actual').children;
+      for (let btn of botones) btn.classList.remove('seleccionado');
+      document.getElementById('comentario-actual').value = '';
+
+      cambiarVista('vista-autoevaluacion');
+    }
+
+    function puntuarEjercicioActual(valor) {
+      notaSeleccionadaActual = valor;
+      const botones = document.getElementById('bloque-puntos-actual').children;
+      for (let btn of botones) btn.classList.remove('seleccionado');
+      botones[valor - 1].classList.add('seleccionado');
+    }
+
+    // Guardar resultado y avanzar al siguiente ejercicio
+    function guardarYContinuar() {
+      const ej = ejercicios[indiceActual];
+      const comentario = document.getElementById('comentario-actual').value;
+
+      resultados.push({
+        palo: ej.palo,
+        icono: ej.icono,
+        nombre: ej.nombre,
+        color: ej.color,
+        nota: notaSeleccionadaActual,
+        comentario: comentario,
+        jokersEjecutados: [...jokersResueltosEnEjercicio]
+      });
+
+      if (indiceActual < ejercicios.length - 1) {
+        indiceActual++;
+        cargarPasoInstruccion();
+        cambiarVista('vista-instruccion');
+      } else {
+        finalizarSimulacro();
+      }
+    }
+
+    function finalizarSimulacro() {
+      clearInterval(intervaloTimer);
+      ui.btnEmergencia.style.display = 'none';
+      if (wakeLock) wakeLock.release();
+
+      const segundosTotales = Math.floor((Date.now() - tiempoInicio) / 1000);
+      document.getElementById('resumen-tiempo').textContent = `Tiempo total de ejecución: ${segundosTotales} segundos`;
+
+      generarInformeResumenAgrupado();
+      cambiarVista('vista-resumen');
+    }
+
+    /* =========================================
+       5. INFORME FINAL AGRUPADO POR PALOS DE PÓKER
+       ========================================= */
+    function generarInformeResumenAgrupado() {
+      const contenedor = document.getElementById('contenido-resumen');
+      contenedor.innerHTML = '';
+
+      resultados.forEach(res => {
+        let bloqueJokersHTML = '';
+        if (res.jokersEjecutados && res.jokersEjecutados.length > 0) {
+          bloqueJokersHTML = `
+            <div style="margin-top: 8px; padding: 6px 10px; background: #2a0033; border: 1px solid var(--joker-color); border-radius: 6px; font-size: 0.85rem; color: var(--joker-color);">
+              <strong>🃏 Jokers Resueltos:</strong> ${res.jokersEjecutados.join(', ')}
+            </div>
+          `;
+        }
+
+        contenedor.innerHTML += `
+          <div style="background: #1e1e1e; padding: 16px; border-radius: 12px; margin-bottom: 15px; border-left: 5px solid ${res.color};">
+            <div style="font-size: 1.3rem; font-weight: bold; color: ${res.color};">
+              ${res.icono} ${res.nombre}
+            </div>
+            <div style="color: var(--treboles-color); font-weight: bold; font-size: 1.1rem; margin: 6px 0;">
+              Valoración: ${res.nota > 0 ? res.nota + ' / 5' : 'Sin calificar'}
+            </div>
+            <div style="color: #ccc; font-style: italic; font-size: 0.95rem;">
+              "${res.comentario || 'Sin observaciones registradas'}"
+            </div>
+            ${bloqueJokersHTML}
+          </div>
+        `;
+      });
+    }
+
+    /* =========================================
+       6. EXPORTACIÓN POR WEBSHARE API
+       ========================================= */
+    async function compartirInforme() {
+      let textoInforme = "🚨 REPORTE DE SIMULACRO DE EVASIÓN 🚨\n\n";
+      textoInforme += `${document.getElementById('resumen-tiempo').textContent}\n\n`;
+      
+      resultados.forEach(res => {
+        textoInforme += `${res.icono} ${res.nombre}\n`;
+        textoInforme += `Puntuación: ${res.nota}/5\n`;
+        if (res.jokersEjecutados.length > 0) {
+          textoInforme += `Jokers: ${res.jokersEjecutados.join(' | ')}\n`;
+        }
+        textoInforme += `Observaciones: ${res.comentario || 'Ninguna'}\n`;
+        textoInforme += `----------------------\n`;
+      });
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'Informe de Evasión', text: textoInforme });
+        } catch (err) { console.log('Cancelado', err); }
+      } else {
+        navigator.clipboard.writeText(textoInforme).then(() => {
+          alert("Informe copiado al portapapeles. Pégalo en tu aplicación de mensajería.");
+        });
+      }
+    }
+
+    /* =========================================
+       7. LÓGICA DE EMERGENCIA REAL (Hold 2 Segundos)
+       ========================================= */
+    let timerEmergencia;
+    const iniciarEmergencia = () => {
+      ui.btnEmergencia.style.backgroundColor = "#990000";
+      timerEmergencia = setTimeout(() => {
+        clearInterval(intervaloTimer);
+        vibrar([1000, 500, 1000]);
+        alert("¡SIMULACRO DETENIDO POR EMERGENCIA REAL!\nComunícate con el instructor inmediatamente.");
+        cambiarVista('vista-normas');
+        ui.btnEmergencia.style.display = 'none';
+      }, 2000);
+    };
+
+    const cancelarEmergencia = () => {
+      clearTimeout(timerEmergencia);
+      ui.btnEmergencia.style.backgroundColor = "var(--danger-color)";
+    };
+
+    ui.btnEmergencia.addEventListener('mousedown', iniciarEmergencia);
+    ui.btnEmergencia.addEventListener('mouseup', cancelarEmergencia);
+    ui.btnEmergencia.addEventListener('mouseleave', cancelarEmergencia);
+    ui.btnEmergencia.addEventListener('touchstart', (e) => { e.preventDefault(); iniciarEmergencia(); });
+    ui.btnEmergencia.addEventListener('touchend', (e) => { e.preventDefault(); cancelarEmergencia(); });
+
+  </script>
+</body>
+</html>
